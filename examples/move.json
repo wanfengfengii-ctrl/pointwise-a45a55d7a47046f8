@@ -1,0 +1,11 @@
+{
+  "batch_id": "move-morning-04",
+  "station": "青岚四号站",
+  "day": "2026-08-12",
+  "base_rows": [[1, 5, 8], [5, 7, 9], [7, 9, 17], [12, 0, 31]],
+  "missing_edit": {"id": "mark-missing", "lo": 2, "hi": 3, "rows": [[2, null, 21]]},
+  "move": {"id": "correct-key-band", "lo": 1, "hi": 4, "dest_lo": 5},
+  "window": [1, 8],
+  "later_edit": {"id": "restore-reading", "lo": 6, "hi": 7, "rows": [[6, 11, 55]]},
+  "second_move": {"id": "relocate-band-again", "lo": 5, "hi": 8, "dest_lo": 9}
+}
