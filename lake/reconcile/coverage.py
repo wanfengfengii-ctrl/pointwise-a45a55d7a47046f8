@@ -1,37 +1,80 @@
 from collections.abc import Collection
 from dataclasses import dataclass
 
-from lake.issue.manifest import FrozenManifest
+from lake.issue.manifest import FrozenManifest, MoveEntry
 from lake.issue.pages import PageIdentity
-from lake.revision.ranges import KeyRange, contains_key, intersect_ranges
+from lake.revision.ranges import KeyMove, KeyRange
 
 
 @dataclass(frozen=True)
 class CoverageSlice:
     span: KeyRange
     owner: PageIdentity | None
+    offset: int
     verified: bool
+
+
+def _remove_range(segments: list, span: KeyRange) -> list:
+    kept = []
+    for lo, hi, owner, offset in segments:
+        if hi <= span.lo or lo >= span.hi:
+            kept.append((lo, hi, owner, offset))
+            continue
+        if lo < span.lo:
+            kept.append((lo, span.lo, owner, offset))
+        if hi > span.hi:
+            kept.append((span.hi, hi, owner, offset))
+    return kept
+
+
+def _apply_page(segments: list, span: KeyRange, owner: PageIdentity) -> list:
+    return _remove_range(segments, span) + [(span.lo, span.hi, owner, 0)]
+
+
+def _apply_move(segments: list, move: KeyMove) -> list:
+    source, shift = move.source, move.shift
+    mapped = [
+        (max(lo, source.lo) + shift, min(hi, source.hi) + shift, owner, offset + shift)
+        for lo, hi, owner, offset in segments
+        if max(lo, source.lo) < min(hi, source.hi)
+    ]
+    segments = _remove_range(segments, source)
+    segments = _remove_range(segments, move.dest)
+    return segments + mapped
+
+
+def _resolve_segments(manifest: FrozenManifest) -> list:
+    """Replay the lineage declarations into sorted (lo, hi, owner, offset) bands."""
+    segments = []
+    for entry in manifest.entries:
+        if isinstance(entry, MoveEntry):
+            segments = _apply_move(segments, entry.move)
+        elif entry.coverage is not None:
+            segments = _apply_page(segments, entry.coverage, entry.identity)
+    return sorted(segments)
 
 
 def resolve_coverage(window: KeyRange, manifest: FrozenManifest,
                      received: Collection[PageIdentity]) -> tuple[CoverageSlice, ...]:
-    """Resolve the last declaration on each span before considering page availability."""
+    """Resolve each band's owner and key offset before considering page availability."""
     boundaries = {window.lo, window.hi}
     clipped = []
-    for entry in manifest.entries:
-        if entry.coverage is None:
-            continue
-        overlap = intersect_ranges(window, entry.coverage)
-        if overlap is not None:
-            boundaries.update((overlap.lo, overlap.hi))
-            clipped.append((overlap, entry.identity))
+    for lo, hi, owner, offset in _resolve_segments(manifest):
+        overlap_lo, overlap_hi = max(lo, window.lo), min(hi, window.hi)
+        if overlap_lo < overlap_hi:
+            boundaries.update((overlap_lo, overlap_hi))
+            clipped.append((overlap_lo, overlap_hi, owner, offset))
 
     cuts = sorted(boundaries)
     slices = []
     for lo, hi in zip(cuts, cuts[1:]):
-        # No declaration can start or end inside this slice.
-        owner = next((identity for span, identity in reversed(clipped) if contains_key(span, lo)), None)
-        slices.append(CoverageSlice(KeyRange(lo, hi), owner, owner is None or owner in received))
+        owner, offset = None, 0
+        for band_lo, band_hi, band_owner, band_offset in clipped:
+            if band_lo <= lo < band_hi:
+                owner, offset = band_owner, band_offset
+                break
+        slices.append(CoverageSlice(KeyRange(lo, hi), owner, offset,
+                                    owner is None or owner in received))
     return tuple(slices)
 
 

@@ -10,3 +10,4 @@ from .receive.reopen import open_inventory as open_inventory
 from .reconcile.window import audit_window as audit_window
 from .revision.history import get_revision as get_revision
 from .revision.ledger import amend as amend
+from .revision.ledger import amend_move as amend_move

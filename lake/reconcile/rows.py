@@ -22,7 +22,8 @@ def select_window_rows(slices: tuple[CoverageSlice, ...],
             continue
         page = pages[piece.owner]
         for page_position, row in enumerate(page.rows, start=1):
-            if contains_key(piece.span, row.key):
+            key = row.key + piece.offset
+            if contains_key(piece.span, key):
                 origin = make_audit_origin(page.identity, page_position, row.origin)
-                rows.append(VerifiedRow(row.key, row.liters, origin))
+                rows.append(VerifiedRow(key, row.liters, origin))
     return tuple(sorted(rows, key=lambda row: row.key))

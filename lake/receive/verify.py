@@ -1,7 +1,7 @@
 from lake.ingest.validation import validate_station_day
-from lake.issue.manifest import FrozenManifest, PageEntry, base_coverage
+from lake.issue.manifest import FrozenManifest, MoveEntry, PageEntry, base_coverage
 from lake.issue.pages import ColdPage, PageIdentity, decode_page, page_digest
-from lake.revision.ranges import KeyRange, contains_key
+from lake.revision.ranges import KeyMove, KeyRange, contains_key
 from lake.wire import require_text
 
 
@@ -15,6 +15,16 @@ def verify_manifest(manifest: FrozenManifest) -> None:
         raise ValueError('manifest must contain a base page')
     revisions = set()
     for page_no, entry in enumerate(manifest.entries, start=1):
+        if isinstance(entry, MoveEntry):
+            if page_no == 1:
+                raise ValueError('base entry must be a page')
+            require_text(entry.revision_id, 'move revision ID')
+            if not isinstance(entry.move, KeyMove):
+                raise ValueError('invalid manifest move declaration')
+            if entry.revision_id in revisions:
+                raise ValueError('manifest repeats a source revision')
+            revisions.add(entry.revision_id)
+            continue
         if not isinstance(entry, PageEntry) or not isinstance(entry.identity, PageIdentity):
             raise ValueError('invalid manifest page entry')
         identity = entry.identity
@@ -28,7 +38,9 @@ def verify_manifest(manifest: FrozenManifest) -> None:
                 raise ValueError('replacement page requires a declared range')
         elif not isinstance(entry.coverage, KeyRange):
             raise ValueError('invalid manifest coverage')
-    if manifest.entries[-1].identity.revision_id != manifest.revision_id:
+    tip = manifest.entries[-1]
+    tip_revision = tip.revision_id if isinstance(tip, MoveEntry) else tip.identity.revision_id
+    if tip_revision != manifest.revision_id:
         raise ValueError('manifest tip revision mismatch')
 
 
@@ -37,6 +49,8 @@ def verify_page(manifest: FrozenManifest, identity: PageIdentity, payload: bytes
             or identity.page_no > len(manifest.entries)):
         raise ValueError('cold page identity is outside this freeze')
     entry = manifest.entries[identity.page_no - 1]
+    if not isinstance(entry, PageEntry):
+        raise ValueError('cold page identity is outside this freeze')
     if identity != entry.identity or page_digest(payload) != identity.digest:
         raise ValueError('cold page does not match the expected identity and digest')
     page = decode_page(payload)

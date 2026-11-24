@@ -3,7 +3,7 @@ import sqlite3
 
 from lake.ingest.rows import ReadingRow, row_data, rows_from_data
 from lake.wire import dump, load
-from .ranges import KeyRange, range_data, range_from_data
+from .ranges import KeyMove, KeyRange, range_data, range_from_data
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,7 @@ class RevisionRecord:
     parent_id: str | None
     station: str
     day: str
-    declaration: KeyRange | None
+    declaration: KeyRange | KeyMove | None
     rows: tuple[ReadingRow, ...]
 
 

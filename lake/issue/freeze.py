@@ -3,7 +3,7 @@ import sqlite3
 
 from lake.ingest.rows import row_data
 from lake.revision.history import read_lineage
-from lake.revision.ranges import range_data
+from lake.revision.ranges import KeyMove, range_data
 from lake.revision.store import RevisionRecord
 from lake.transactions import transaction
 from lake.wire import dump, require_text
@@ -37,6 +37,7 @@ def freeze_table(db: sqlite3.Connection, request_id: str, revision_id: str) -> I
         pages = tuple(
             make_cold_page(freeze_id, record.revision_id, page_no, record.rows)
             for page_no, record in enumerate(lineage, start=1)
+            if not isinstance(record.declaration, KeyMove)
         )
         manifest = build_manifest(freeze_id, lineage, pages)
         receipt = make_issue_receipt(request_id, revision_id, freeze_id)

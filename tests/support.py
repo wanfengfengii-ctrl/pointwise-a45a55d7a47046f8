@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from lake import amend, fetch_bundle, freeze_table, initialize_source, open_inventory, read_page, submit
+from lake.issue.manifest import MoveEntry
 
 
 BASE_ROWS = ((1, 5, 8), (2, 7, 9), (3, 11, 17))
@@ -41,7 +42,10 @@ class LakeCase(unittest.TestCase):
     def issue(self, revision_id, request_id):
         receipt = freeze_table(self.source, request_id, revision_id)
         manifest = fetch_bundle(self.source, receipt.freeze_id)
-        pages = tuple(read_page(self.source, entry.identity) for entry in manifest.entries)
+        pages = tuple(
+            None if isinstance(entry, MoveEntry) else read_page(self.source, entry.identity)
+            for entry in manifest.entries
+        )
         return receipt, manifest, pages
 
 
